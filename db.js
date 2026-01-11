@@ -15,7 +15,8 @@ const CsvData=fs.readFileSync("users.csv","utf-8");
 const lines=CsvData.trim().split("\n").slice(1);
 //Now converting single lines to array 
 const users =lines.map(lines=>{
-    const[id,name,email,age]=lines.split(",");
+const[id,name,email,age]=lines.split(",");
+//converting one csv row  into javascript objects 
     return{id:Number(id) ,name,email,age:Number(age)};
 })
 //==========================================
@@ -29,6 +30,11 @@ const users =lines.map(lines=>{
 //Main add function starts here 
 const command =process.argv[2];
 switch(command){
+case 'new' :
+const newfile=process.argv[2];
+fs.writeFileSync("users.csv",`id,name,email,age\n`);
+break;
+
 case 'add':
 const name =process.argv[3];
 const email=process.argv[4];
@@ -55,4 +61,108 @@ case  'list':
         console.log(users[i]);
     }
     break;
+
+case 'delete' : 
+      const Target =Number(process.argv[3]);
+      if(isNaN(Target)){
+        console.log("enter a valid number");
+        break;
+      }
+    const after_del_users=  users.filter(u=>u.id!==Target);
+    if(users.length==after_del_users.length){
+        console.log("user not found");
+        break;
+    }
+    
+    //converting the arrays back to string,join the lines and the header.
+   const strings=`id,name,email,age\n`+ after_del_users.map(u=>`${u.id},${u.name},${u.email},${u.age}`).join("\n");
+
+     //now rewriting the file back 
+     fs.writeFileSync("users.csv",strings);
+     console.log("user" + Number(process.argv[3]) + "deletd succcesfully");
+     break;
+
+    case 'find' :
+    const field =process.argv[3];
+    switch (field){
+    case 'id' :
+        const upd_id=Number(process.argv[4]);
+        const id_match=users.some(u=>u.id==upd_id);
+        if(id_match){
+           console.log(`Id found ID:${id_match.id}`);
+        }
+        break;
+     case 'name' :
+        const upd_name =process.argv[4];
+        const name_match=users.find(u=>u.name===upd_name);
+        if(name_match){
+            console.log(`Name found ID:${name_match.id}` )
+        }
+        else{
+             console.log("Not found " )
+        }
+     break;
+     case 'email':
+        const upd_email =process.argv[4];
+        const email_match=users.find(u=>u.email===upd_email);
+        if(email_match){
+             console.log(`Email found ID:${email_match.id}`)
+        }
+        else{
+             console.log("Not found " )
+        }
+        break;
+     case  'age':
+        const upd_age =Number(process.argv[4]);
+        const age_match=users.some(u=>u.age==upd_age);
+        if(age_match){
+            console.log(`Age Found ID:${age_match.id}`)
+        }
+           break;
+
+    }
+case 'update' :
+    const id_find=Number(process.argv[3]);
+    const id_found=users.find(u=>u.id===id_find);
+   
+    if (!id_found) {
+        console.log("User not found");
+        break;
+    }
+    const field_1 =process.argv[4];
+    switch (field_1){
+    case 'id' :
+        const upd_id=Number(process.argv[5]);
+         id_found.id=upd_id;
+         break;
+     case 'name' :
+        const upd_name=process.argv[5];
+        id_found.name=upd_name;
+        console.log("updated successfully")
+        break;
+     case 'email':
+       const  upd_email=process.argv[5];
+       id_found.email=upd_email;
+       break;
+     case  'age':
+      const upd_age=Number(process.argv[5]);
+        id_found.age=upd_age;
+        break;
+
+    }
+
+const updated_users =`id,name,email,age\n`+ users.map(u=>`${u.id},${u.name},${u.email},${u.age}`).join("\n");
+
+     //now rewriting the file back 
+     fs.writeFileSync("users.csv",updated_users);
+     console.log("user" + Number(process.argv[3]) + "updated succcesfully");
+     break;
+
+
 }
+
+//updating  the values
+//make a switch case for the fields and then find the particular value in the field and then replace it 
+
+
+      
