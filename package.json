@@ -4,7 +4,8 @@
   "description": "A simple command-line users database built with Node.js and CSV.",
   "main": "db.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test/run.js",
+    "lint:fix": "eslint --fix"
   },
   "repository": {
     "type": "git",
