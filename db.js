@@ -3,9 +3,7 @@
 const fs =require("fs");
 if(!fs.existsSync("users.csv")){
     fs.writeFileSync("users.csv",`id,name,email,age\n`);
-}else{
-    console.log("File loaded!\nready to go ")
-    }
+}
 //==========================================
 // CONVERTING THE DATA FROM STRING TO ARRAYS 
 //==========================================
@@ -20,7 +18,7 @@ const[id,name,email,age]=lines.split(",");
     return{id:Number(id) ,name,email,age:Number(age)};
 })
 //==========================================
-//  ADD AND LIST COMMANDS
+//  ADD COMMAND
 //==========================================
  //generating a new Id 
  function newId(users){
@@ -55,35 +53,42 @@ const emailExists=users.some(u=>u.email===email);
     fs.appendFileSync("users.csv",newuser);
     console.log("user added successfullly");
      break;
-// list command for displaying the data     
+//==========================================
+//  LIST COMMAND
+//==========================================    
 case  'list':
     for(let i=0;i<users.length;i++){
         console.log(users[i]);
     }
     break;
-
+//==========================================
+//  DELETE COMMAND
+//==========================================
 case 'delete' : 
+// TAKING THE ID TO BE DELETED AND CHECKING IF THE ID IS A VALID NUMBER 
       const Target =Number(process.argv[3]);
       if(isNaN(Target)){
         console.log("enter a valid number");
         break;
       }
+    //FINDING THE ID AND DELETING THE ID   
     const after_del_users=  users.filter(u=>u.id!==Target);
     if(users.length==after_del_users.length){
         console.log("user not found");
         break;
     }
-    
-    //converting the arrays back to string,join the lines and the header.
+    //JOINING ALL THE ARRAY ROWS AND ADDING THE HEADER 
    const strings=`id,name,email,age\n`+ after_del_users.map(u=>`${u.id},${u.name},${u.email},${u.age}`).join("\n");
-
-     //now rewriting the file back 
-     fs.writeFileSync("users.csv",strings);
-     console.log("user" + Number(process.argv[3]) + "deletd succcesfully");
-     break;
-
-    case 'find' :
-    const field =process.argv[3];
+    // WRITING BACK TO THE CSV FILE 
+    fs.writeFileSync("users.csv",strings);
+    console.log("user" + Number(process.argv[3]) + "deletd succcesfully");
+    break;
+//==========================================
+//  FIND COMMNAD
+//==========================================
+case 'find' :
+const field =process.argv[3];
+//CHOOSING THE FIELD 
     switch (field){
     case 'id' :
         const upd_id=Number(process.argv[4]);
@@ -92,6 +97,7 @@ case 'delete' :
            console.log(`Id found ID:${id_match.id}`);
         }
         break;
+      //FINDING THE SPECIFIC TERM IN THE SPECIFIC FIELD  
      case 'name' :
         const upd_name =process.argv[4];
         const name_match=users.find(u=>u.name===upd_name);
@@ -121,7 +127,12 @@ case 'delete' :
            break;
 
     }
+    break;
+//==========================================
+//  UPDATE COMMNAD
+//==========================================
 case 'update' :
+    //FINDING THE ID AND CHECKING IF ID IS PRESENT 
     const id_find=Number(process.argv[3]);
     const id_found=users.find(u=>u.id===id_find);
    
@@ -129,6 +140,7 @@ case 'update' :
         console.log("User not found");
         break;
     }
+    //IF ID EXISTS ,CHOOSE THE FIELD TO BE UPDATED AND UPDATE 
     const field_1 =process.argv[4];
     switch (field_1){
     case 'id' :
@@ -148,21 +160,14 @@ case 'update' :
       const upd_age=Number(process.argv[5]);
         id_found.age=upd_age;
         break;
-
-    }
-
+      }
+//NOW JOIN THE ARRAY ROWS (LINES) ALONG WITH THE HEADER 
 const updated_users =`id,name,email,age\n`+ users.map(u=>`${u.id},${u.name},${u.email},${u.age}`).join("\n");
-
-     //now rewriting the file back 
+//NOW REWRITE THE FILE BACK 
      fs.writeFileSync("users.csv",updated_users);
      console.log("user" + Number(process.argv[3]) + "updated succcesfully");
      break;
-
-
 }
-
-//updating  the values
-//make a switch case for the fields and then find the particular value in the field and then replace it 
 
 
       
