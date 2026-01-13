@@ -4,7 +4,8 @@
   "description": "A simple command-line users database built with Node.js and CSV.",
   "main": "db.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest --runInBand",
+    "lint:fix": "eslint --fix"
   },
   "repository": {
     "type": "git",
@@ -19,6 +20,7 @@
   },
   "homepage": "https://github.com/Princekmr0501/csv-users-db#readme",
   "devDependencies": {
-    "eslint": "^9.39.2"
+    "eslint": "^9.39.2",
+    "jest": "^30.2.0"
   }
 }
