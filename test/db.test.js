@@ -1,6 +1,5 @@
 const fs = require("node:fs")
 
-const { assert, test } = require("./tinytest")
 const {
   usersCsvPath,
   deleteUsersCsvIfExists,
@@ -9,27 +8,27 @@ const {
   runDbInProcess,
 } = require("./helpers")
 
-// Per requirement: run tests in repo dir and delete users.csv before starting.
-deleteUsersCsvIfExists()
+// NOTE: This suite is intentionally stateful (later tests depend on earlier ones).
+// Keep `--runInBand` and keep tests in this file order.
 
 function expectCsvHeader() {
-  assert.ok(fs.existsSync(usersCsvPath), "`users.csv` should exist")
+  expect(fs.existsSync(usersCsvPath)).toBe(true)
   const { header } = parseUsersCsv()
-  assert.equal(header, "id,name,email,age", "CSV header must be exactly: id,name,email,age")
+  expect(header).toBe("id,name,email,age")
 }
 
 function expectUsers(expected) {
   const { rows } = parseUsersCsv()
-  assert.equal(rows.length, expected.length, "Unexpected number of users in CSV")
+  expect(rows).toHaveLength(expected.length)
   for (let i = 0; i < expected.length; i++) {
     const got = rows[i]
     const exp = expected[i]
-    assert.equal(got.id, exp.id, `Row ${i + 1}: id mismatch`)
-    assert.equal(got.name, exp.name, `Row ${i + 1}: name mismatch`)
-    assert.equal(got.email, exp.email, `Row ${i + 1}: email mismatch`)
-    assert.equal(got.age, exp.age, `Row ${i + 1}: age mismatch`)
-    assert.ok(!Number.isNaN(got.id), `Row ${i + 1}: id must be a number`)
-    assert.ok(!Number.isNaN(got.age), `Row ${i + 1}: age must be a number`)
+    expect(got.id).toBe(exp.id)
+    expect(got.name).toBe(exp.name)
+    expect(got.email).toBe(exp.email)
+    expect(got.age).toBe(exp.age)
+    expect(Number.isNaN(got.id)).toBe(false)
+    expect(Number.isNaN(got.age)).toBe(false)
   }
 }
 
@@ -37,219 +36,239 @@ function expectListOutput(lines, expectedUsers) {
   const expectedLines = expectedUsers.map(
     (u) => `${u.id} | ${u.name} | ${u.email} | ${u.age}`
   )
-  assert.deepEqual(
-    lines,
-    expectedLines,
-    "list output should print one user per line in `id | name | email | age` format"
-  )
+  expect(lines).toEqual(expectedLines)
 }
 
-test("init: running with no command creates users.csv header and does not crash", () => {
-  const res = runDbInProcess([])
-  assert.ok(!res.threw, `db.js should not throw. Error: ${res.error?.message ?? "none"}`)
-  expectCsvHeader()
+describe("db.js CLI (stateful)", () => {
+  beforeAll(() => {
+    // Per requirement: run tests in repo dir and delete users.csv before starting.
+    deleteUsersCsvIfExists()
+  })
 
-  // Ideal: header only on a fresh run
-  const csv = readUsersCsvText()
-  assert.match(csv, /^id,name,email,age\r?\n?$/, "Fresh DB should contain only the header row")
-})
+  describe("Setup", () => {
+    it("init: running with no command creates users.csv header and does not crash", () => {
+      const res = runDbInProcess([])
+      expect(res.threw).toBe(false)
+      expectCsvHeader()
 
-test("new: resets users.csv to header only", () => {
-  const res = runDbInProcess(["new"])
-  assert.ok(!res.threw, `db.js should not throw on 'new'. Error: ${res.error?.message ?? "none"}`)
-  expectCsvHeader()
+      // Ideal: header only on a fresh run
+      const csv = readUsersCsvText()
+      expect(csv).toMatch(/^id,name,email,age\r?\n?$/)
+    })
+  })
 
-  const csv = readUsersCsvText()
-  assert.match(csv, /^id,name,email,age\r?\n?$/, "`new` should reset file to header only")
-})
+  describe("Create", () => {
+    it("new: resets users.csv to header only", () => {
+      const res = runDbInProcess(["new"])
+      expect(res.threw).toBe(false)
+      expectCsvHeader()
 
-test("list (empty): prints nothing and does not crash", () => {
-  const res = runDbInProcess(["list"])
-  assert.ok(!res.threw, `db.js should not throw on 'list'. Error: ${res.error?.message ?? "none"}`)
-  assert.equal(res.logs.length, 0, "Empty list should produce no output lines")
-  expectCsvHeader()
-})
+      const csv = readUsersCsvText()
+      expect(csv).toMatch(/^id,name,email,age\r?\n?$/)
+    })
 
-test("add (valid): adds first user with id=1 and persists", () => {
-  const before = readUsersCsvText()
-  const res = runDbInProcess(["add", "John Doe", "john@email.com", "25"])
-  assert.ok(!res.threw, `db.js should not throw on 'add'. Error: ${res.error?.message ?? "none"}`)
-  assert.ok(res.logs.length > 0, "add should print a success message")
-  assert.match(res.logs.join("\n"), /added/i, "add should indicate success in output")
-  assert.ok(readUsersCsvText() !== before, "CSV should change after adding a valid user")
+    it("add (valid): adds first user with id=1 and persists", () => {
+      const before = readUsersCsvText()
+      const res = runDbInProcess(["add", "John Doe", "john@email.com", "25"])
+      expect(res.threw).toBe(false)
+      expect(res.logs.length).toBeGreaterThan(0)
+      expect(res.logs.join("\n")).toMatch(/added/i)
+      expect(readUsersCsvText()).not.toBe(before)
 
-  expectCsvHeader()
-  expectUsers([{ id: 1, name: "John Doe", email: "john@email.com", age: 25 }])
-})
+      expectCsvHeader()
+      expectUsers([{ id: 1, name: "John Doe", email: "john@email.com", age: 25 }])
+    })
 
-test("add (valid): adds second user with id=2", () => {
-  const res = runDbInProcess(["add", "Alice", "alice@email.com", "30"])
-  assert.ok(!res.threw, `db.js should not throw on 'add'. Error: ${res.error?.message ?? "none"}`)
-  expectUsers([
-    { id: 1, name: "John Doe", email: "john@email.com", age: 25 },
-    { id: 2, name: "Alice", email: "alice@email.com", age: 30 },
-  ])
-})
+    it("add (valid): adds second user with id=2", () => {
+      const res = runDbInProcess(["add", "Alice", "alice@email.com", "30"])
+      expect(res.threw).toBe(false)
+      expectUsers([
+        { id: 1, name: "John Doe", email: "john@email.com", age: 25 },
+        { id: 2, name: "Alice", email: "alice@email.com", age: 30 },
+      ])
+    })
+  })
 
-test("list (non-empty): prints users in `id | name | email | age` format", () => {
-  const res = runDbInProcess(["list"])
-  assert.ok(!res.threw, `db.js should not throw on 'list'. Error: ${res.error?.message ?? "none"}`)
-  expectListOutput(res.logs, [
-    { id: 1, name: "John Doe", email: "john@email.com", age: 25 },
-    { id: 2, name: "Alice", email: "alice@email.com", age: 30 },
-  ])
-})
+  describe("Read", () => {
+    it("list (empty): prints nothing and does not crash", () => {
+      // reset first
+      runDbInProcess(["new"])
+      const res = runDbInProcess(["list"])
+      expect(res.threw).toBe(false)
+      expect(res.logs).toHaveLength(0)
+      expectCsvHeader()
 
-test("add (validation): duplicate email is rejected and does not change file", () => {
-  const before = readUsersCsvText()
-  const res = runDbInProcess(["add", "Alice 2", "alice@email.com", "31"])
-  assert.ok(!res.threw, `db.js should not throw on invalid add. Error: ${res.error?.message ?? "none"}`)
-  assert.match(res.logs.join("\n"), /email/i, "Should explain email is invalid/duplicate")
-  assert.equal(readUsersCsvText(), before, "CSV should not change on duplicate email")
-})
+      // restore state for later tests
+      runDbInProcess(["add", "John Doe", "john@email.com", "25"])
+      runDbInProcess(["add", "Alice", "alice@email.com", "30"])
+    })
 
-test("add (validation): missing arguments is rejected and does not change file", () => {
-  const before = readUsersCsvText()
-  const res = runDbInProcess(["add", "Bob"])
-  assert.ok(!res.threw, `db.js should not throw on invalid add. Error: ${res.error?.message ?? "none"}`)
-  assert.ok(res.logs.length > 0, "Should print a validation error")
-  assert.equal(readUsersCsvText(), before, "CSV should not change on missing args")
-})
+    it("list (non-empty): prints users in `id | name | email | age` format", () => {
+      const res = runDbInProcess(["list"])
+      expect(res.threw).toBe(false)
+      expectListOutput(res.logs, [
+        { id: 1, name: "John Doe", email: "john@email.com", age: 25 },
+        { id: 2, name: "Alice", email: "alice@email.com", age: 30 },
+      ])
+    })
 
-test("add (validation): non-numeric age is rejected and does not change file", () => {
-  const before = readUsersCsvText()
-  const res = runDbInProcess(["add", "Bob", "bob@email.com", "notanumber"])
-  assert.ok(!res.threw, `db.js should not throw on invalid add. Error: ${res.error?.message ?? "none"}`)
-  assert.ok(res.logs.length > 0, "Should print a validation error")
-  assert.equal(readUsersCsvText(), before, "CSV should not change on non-numeric age")
-})
+    it("find (email): existing user prints the matching user", () => {
+      const res = runDbInProcess(["find", "email", "john@email.com"])
+      expect(res.threw).toBe(false)
+      expect(res.logs).toHaveLength(1)
+      expect(res.logs[0]).toBe("1 | John Doe | john@email.com | 25")
+    })
 
-test("add (validation): negative age is rejected and does not change file", () => {
-  const before = readUsersCsvText()
-  const res = runDbInProcess(["add", "Bob", "bob2@email.com", "-1"])
-  assert.ok(!res.threw, `db.js should not throw on invalid add. Error: ${res.error?.message ?? "none"}`)
-  assert.ok(res.logs.length > 0, "Should print a validation error")
-  assert.equal(readUsersCsvText(), before, "CSV should not change on negative age")
-})
+    it("find (email): missing user prints `Not found`", () => {
+      const res = runDbInProcess(["find", "email", "missing@email.com"])
+      expect(res.threw).toBe(false)
+      expect(res.logs).toHaveLength(1)
+      expect(res.logs[0]).toBe("Not found")
+    })
 
-test("find (email): existing user prints the matching user", () => {
-  const res = runDbInProcess(["find", "email", "john@email.com"])
-  assert.ok(!res.threw, `db.js should not throw on 'find'. Error: ${res.error?.message ?? "none"}`)
-  assert.equal(res.logs.length, 1, "find should print exactly one line")
-  assert.equal(
-    res.logs[0],
-    "1 | John Doe | john@email.com | 25",
-    "find should print the full user in the same format as list"
-  )
-})
+    it("find (id): existing user prints the matching user", () => {
+      const res = runDbInProcess(["find", "id", "1"])
+      expect(res.threw).toBe(false)
+      expect(res.logs).toHaveLength(1)
+      expect(res.logs[0]).toBe("1 | John Doe | john@email.com | 25")
+    })
 
-test("find (email): missing user prints `Not found`", () => {
-  const res = runDbInProcess(["find", "email", "missing@email.com"])
-  assert.ok(!res.threw, `db.js should not throw on 'find'. Error: ${res.error?.message ?? "none"}`)
-  assert.equal(res.logs.length, 1, "find should print exactly one line")
-  assert.equal(res.logs[0], "Not found", "find should say Not found when no match exists")
-})
+    it("find (id): missing user prints `Not found`", () => {
+      const res = runDbInProcess(["find", "id", "999"])
+      expect(res.threw).toBe(false)
+      expect(res.logs).toHaveLength(1)
+      expect(res.logs[0]).toBe("Not found")
+    })
+  })
 
-test("find (id): existing user prints the matching user", () => {
-  const res = runDbInProcess(["find", "id", "1"])
-  assert.ok(!res.threw, `db.js should not throw on 'find'. Error: ${res.error?.message ?? "none"}`)
-  assert.equal(res.logs.length, 1, "find should print exactly one line")
-  assert.equal(
-    res.logs[0],
-    "1 | John Doe | john@email.com | 25",
-    "find should print the full user in the same format as list"
-  )
-})
+  describe("Update", () => {
+    it("update: updates one user field and keeps CSV valid", () => {
+      const res = runDbInProcess(["update", "1", "age", "31"])
+      expect(res.threw).toBe(false)
 
-test("find (id): missing user prints `Not found`", () => {
-  const res = runDbInProcess(["find", "id", "999"])
-  assert.ok(!res.threw, `db.js should not throw on 'find'. Error: ${res.error?.message ?? "none"}`)
-  assert.equal(res.logs.length, 1, "find should print exactly one line")
-  assert.equal(res.logs[0], "Not found", "find should say Not found when no match exists")
-})
+      expectCsvHeader()
+      expectUsers([
+        { id: 1, name: "John Doe", email: "john@email.com", age: 31 },
+        { id: 2, name: "Alice", email: "alice@email.com", age: 30 },
+      ])
+    })
 
-test("find (invalid field): prints a clear error message", () => {
-  const res = runDbInProcess(["find", "name", "John Doe"])
-  assert.ok(!res.threw, `db.js should not throw on invalid field. Error: ${res.error?.message ?? "none"}`)
-  assert.ok(res.logs.length > 0, "Should print an error for invalid field name")
-  assert.match(res.logs.join("\n"), /invalid|field|allowed/i, "Error message should be clear")
-})
+    it("update: missing id prints `User not found` and does not change file", () => {
+      const before = readUsersCsvText()
+      const res = runDbInProcess(["update", "999", "age", "40"])
+      expect(res.threw).toBe(false)
+      expect(res.logs.join("\n")).toMatch(/not found/i)
+      expect(readUsersCsvText()).toBe(before)
+    })
+  })
 
-test("update: updates one user field and keeps CSV valid", () => {
-  const res = runDbInProcess(["update", "1", "age", "31"])
-  assert.ok(!res.threw, `db.js should not throw on 'update'. Error: ${res.error?.message ?? "none"}`)
+  describe("Delete", () => {
+    it("delete: deletes existing user and preserves others", () => {
+      const res = runDbInProcess(["delete", "2"])
+      expect(res.threw).toBe(false)
 
-  expectCsvHeader()
-  expectUsers([
-    { id: 1, name: "John Doe", email: "john@email.com", age: 31 },
-    { id: 2, name: "Alice", email: "alice@email.com", age: 30 },
-  ])
-})
+      expectCsvHeader()
+      expectUsers([{ id: 1, name: "John Doe", email: "john@email.com", age: 31 }])
+    })
 
-test("update: missing id prints `User not found` and does not change file", () => {
-  const before = readUsersCsvText()
-  const res = runDbInProcess(["update", "999", "age", "40"])
-  assert.ok(!res.threw, `db.js should not throw on 'update'. Error: ${res.error?.message ?? "none"}`)
-  assert.match(res.logs.join("\n"), /not found/i, "Should indicate missing user")
-  assert.equal(readUsersCsvText(), before, "CSV should not change when updating missing user")
-})
+    it("delete: missing id prints `user not found` and does not change file", () => {
+      const before = readUsersCsvText()
+      const res = runDbInProcess(["delete", "999"])
+      expect(res.threw).toBe(false)
+      expect(res.logs.join("\n")).toMatch(/not found/i)
+      expect(readUsersCsvText()).toBe(before)
+    })
+  })
 
-test("update: invalid field prints a clear error and does not change file", () => {
-  const before = readUsersCsvText()
-  const res = runDbInProcess(["update", "1", "id", "123"])
-  assert.ok(!res.threw, `db.js should not throw on invalid update field. Error: ${res.error?.message ?? "none"}`)
-  assert.ok(res.logs.length > 0, "Should print an error for invalid update field")
-  assert.match(res.logs.join("\n"), /invalid|field|allowed/i, "Error message should be clear")
-  assert.equal(readUsersCsvText(), before, "CSV should not change on invalid update field")
-})
+  describe("Errors", () => {
+    it("add (validation): duplicate email is rejected and does not change file", () => {
+      // recreate 2-user state for this block
+      runDbInProcess(["new"])
+      runDbInProcess(["add", "John Doe", "john@email.com", "25"])
+      runDbInProcess(["add", "Alice", "alice@email.com", "30"])
 
-test("update: changing email to an existing email should be rejected", () => {
-  const before = readUsersCsvText()
-  const res = runDbInProcess(["update", "1", "email", "alice@email.com"])
-  assert.ok(!res.threw, `db.js should not throw on update. Error: ${res.error?.message ?? "none"}`)
-  assert.ok(res.logs.length > 0, "Should print a validation error")
-  assert.match(res.logs.join("\n"), /email|exists|unique|duplicate|invalid/i, "Should explain duplicate email")
-  assert.equal(readUsersCsvText(), before, "CSV should not change when setting duplicate email")
-})
+      const before = readUsersCsvText()
+      const res = runDbInProcess(["add", "Alice 2", "alice@email.com", "31"])
+      expect(res.threw).toBe(false)
+      expect(res.logs.join("\n")).toMatch(/email/i)
+      expect(readUsersCsvText()).toBe(before)
+    })
 
-test("delete: deletes existing user and preserves others", () => {
-  const res = runDbInProcess(["delete", "2"])
-  assert.ok(!res.threw, `db.js should not throw on 'delete'. Error: ${res.error?.message ?? "none"}`)
+    it("add (validation): missing arguments is rejected and does not change file", () => {
+      const before = readUsersCsvText()
+      const res = runDbInProcess(["add", "Bob"])
+      expect(res.threw).toBe(false)
+      expect(res.logs.length).toBeGreaterThan(0)
+      expect(readUsersCsvText()).toBe(before)
+    })
 
-  expectCsvHeader()
-  expectUsers([{ id: 1, name: "John Doe", email: "john@email.com", age: 31 }])
-})
+    it("add (validation): non-numeric age is rejected and does not change file", () => {
+      const before = readUsersCsvText()
+      const res = runDbInProcess(["add", "Bob", "bob@email.com", "notanumber"])
+      expect(res.threw).toBe(false)
+      expect(res.logs.length).toBeGreaterThan(0)
+      expect(readUsersCsvText()).toBe(before)
+    })
 
-test("delete: missing id prints `user not found` and does not change file", () => {
-  const before = readUsersCsvText()
-  const res = runDbInProcess(["delete", "999"])
-  assert.ok(!res.threw, `db.js should not throw on 'delete'. Error: ${res.error?.message ?? "none"}`)
-  assert.match(res.logs.join("\n"), /not found/i, "Should indicate user not found")
-  assert.equal(readUsersCsvText(), before, "CSV should not change when deleting missing user")
-})
+    it("add (validation): negative age is rejected and does not change file", () => {
+      const before = readUsersCsvText()
+      const res = runDbInProcess(["add", "Bob", "bob2@email.com", "-1"])
+      expect(res.threw).toBe(false)
+      expect(res.logs.length).toBeGreaterThan(0)
+      expect(readUsersCsvText()).toBe(before)
+    })
 
-test("delete: non-numeric id prints a validation error and does not change file", () => {
-  const before = readUsersCsvText()
-  const res = runDbInProcess(["delete", "not-a-number"])
-  assert.ok(!res.threw, `db.js should not throw on 'delete'. Error: ${res.error?.message ?? "none"}`)
-  assert.ok(res.logs.length > 0, "Should print a validation error")
-  assert.match(res.logs.join("\n"), /valid|number|id/i, "Error message should be clear")
-  assert.equal(readUsersCsvText(), before, "CSV should not change on invalid id")
-})
+    it("find (invalid field): prints a clear error message", () => {
+      const res = runDbInProcess(["find", "name", "John Doe"])
+      expect(res.threw).toBe(false)
+      expect(res.logs.length).toBeGreaterThan(0)
+      expect(res.logs.join("\n")).toMatch(/invalid|field|allowed/i)
+    })
 
-test("unknown command: prints a clear error and does not corrupt the CSV", () => {
-  const before = readUsersCsvText()
-  const res = runDbInProcess(["unknown-command"])
-  assert.ok(!res.threw, `db.js should not throw on unknown command. Error: ${res.error?.message ?? "none"}`)
-  assert.ok(res.logs.length > 0, "Should print an error message for unknown commands")
-  assert.match(res.logs.join("\n"), /unknown|invalid|command/i, "Unknown command error should be clear")
-  assert.equal(readUsersCsvText(), before, "CSV should not change on unknown command")
-})
+    it("update: invalid field prints a clear error and does not change file", () => {
+      const before = readUsersCsvText()
+      const res = runDbInProcess(["update", "1", "id", "123"])
+      expect(res.threw).toBe(false)
+      expect(res.logs.length).toBeGreaterThan(0)
+      expect(res.logs.join("\n")).toMatch(/invalid|field|allowed/i)
+      expect(readUsersCsvText()).toBe(before)
+    })
 
-test("cleanup: reset file to header only (keeps repo tidy after tests)", () => {
-  const res = runDbInProcess(["new"])
-  assert.ok(!res.threw, `db.js should not throw on 'new'. Error: ${res.error?.message ?? "none"}`)
-  const csv = readUsersCsvText()
-  assert.match(csv, /^id,name,email,age\r?\n?$/, "`new` should reset file to header only")
+    it("update: changing email to an existing email should be rejected", () => {
+      const before = readUsersCsvText()
+      const res = runDbInProcess(["update", "1", "email", "alice@email.com"])
+      expect(res.threw).toBe(false)
+      expect(res.logs.length).toBeGreaterThan(0)
+      expect(res.logs.join("\n")).toMatch(/email|exists|unique|duplicate|invalid/i)
+      expect(readUsersCsvText()).toBe(before)
+    })
+
+    it("delete: non-numeric id prints a validation error and does not change file", () => {
+      const before = readUsersCsvText()
+      const res = runDbInProcess(["delete", "not-a-number"])
+      expect(res.threw).toBe(false)
+      expect(res.logs.length).toBeGreaterThan(0)
+      expect(res.logs.join("\n")).toMatch(/valid|number|id/i)
+      expect(readUsersCsvText()).toBe(before)
+    })
+
+    it("unknown command: prints a clear error and does not corrupt the CSV", () => {
+      const before = readUsersCsvText()
+      const res = runDbInProcess(["unknown-command"])
+      expect(res.threw).toBe(false)
+      expect(res.logs.length).toBeGreaterThan(0)
+      expect(res.logs.join("\n")).toMatch(/unknown|invalid|command/i)
+      expect(readUsersCsvText()).toBe(before)
+    })
+  })
+
+  describe("Cleanup", () => {
+    it("reset file to header only (keeps repo tidy after tests)", () => {
+      const res = runDbInProcess(["new"])
+      expect(res.threw).toBe(false)
+      const csv = readUsersCsvText()
+      expect(csv).toMatch(/^id,name,email,age\r?\n?$/)
+    })
+  })
 })
 

@@ -1,5 +1,6 @@
 const fs = require("node:fs")
 const path = require("node:path")
+const util = require("node:util")
 
 const repoRoot = path.resolve(__dirname, "..")
 const dbPath = path.join(repoRoot, "db.js")
@@ -15,13 +16,9 @@ function readUsersCsvText() {
   return fs.readFileSync(usersCsvPath, "utf8")
 }
 
-function readUsersCsvLines() {
-  const text = readUsersCsvText()
-  return text.split(/\r?\n/).filter((l) => l.length > 0)
-}
-
 function parseUsersCsv() {
-  const lines = readUsersCsvLines()
+  const text = readUsersCsvText()
+  const lines = text.split(/\r?\n/).filter((l) => l.length > 0)
   if (lines.length === 0) {
     return { header: null, rows: [] }
   }
@@ -39,18 +36,40 @@ function parseUsersCsv() {
   return { header, rows }
 }
 
-function captureConsoleLogs(fn) {
+function formatConsoleCall(args) {
+  return util.format(...args)
+}
+
+function captureConsole(fn) {
+  // Prefer Jest spies in Jest environment (works with Jest's custom console)
+  if (typeof jest !== "undefined" && typeof jest.spyOn === "function") {
+    const logs = []
+    const errors = []
+
+    const logSpy = jest.spyOn(console, "log").mockImplementation((...args) => {
+      logs.push(formatConsoleCall(args))
+    })
+    const errSpy = jest.spyOn(console, "error").mockImplementation((...args) => {
+      errors.push(formatConsoleCall(args))
+    })
+
+    try {
+      const result = fn()
+      return { result, logs, errors }
+    } finally {
+      logSpy.mockRestore()
+      errSpy.mockRestore()
+    }
+  }
+
+  // Fallback for plain Node execution
   const originalLog = console.log
   const originalError = console.error
   const logs = []
   const errors = []
 
-  console.log = (...args) => {
-    logs.push(args.map(String).join(" "))
-  }
-  console.error = (...args) => {
-    errors.push(args.map(String).join(" "))
-  }
+  console.log = (...args) => logs.push(formatConsoleCall(args))
+  console.error = (...args) => errors.push(formatConsoleCall(args))
 
   try {
     const result = fn()
@@ -59,11 +78,6 @@ function captureConsoleLogs(fn) {
     console.log = originalLog
     console.error = originalError
   }
-}
-
-function clearRequireCacheForDb() {
-  const resolved = require.resolve(dbPath)
-  delete require.cache[resolved]
 }
 
 function runDbInProcess(args) {
@@ -76,11 +90,23 @@ function runDbInProcess(args) {
 
   let threw = false
   let error = null
-  const { logs, errors, result } = captureConsoleLogs(() => {
+  const { logs, errors, result } = captureConsole(() => {
     process.chdir(repoRoot)
     process.argv = argv
-    clearRequireCacheForDb()
     try {
+      // Jest keeps its own module registry, so use isolateModules to re-run db.js each call.
+      if (typeof jest !== "undefined" && typeof jest.isolateModules === "function") {
+        let mod
+        jest.isolateModules(() => {
+          // eslint-disable-next-line global-require, import/no-dynamic-require
+          mod = require(dbPath)
+        })
+        return mod
+      }
+
+      // Fallback for plain node execution (not Jest)
+      const resolved = require.resolve(dbPath)
+      delete require.cache[resolved]
       // eslint-disable-next-line global-require, import/no-dynamic-require
       return require(dbPath)
     } catch (e) {
@@ -110,7 +136,6 @@ module.exports = {
   usersCsvPath,
   deleteUsersCsvIfExists,
   readUsersCsvText,
-  readUsersCsvLines,
   parseUsersCsv,
   runDbInProcess,
 }
