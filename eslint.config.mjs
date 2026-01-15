@@ -1,3 +1,5 @@
+
+import importPlugin from "eslint-plugin-import";
 export default [
     {
         files: ["**/*.js"],
@@ -5,6 +7,10 @@ export default [
             ecmaVersion: "latest",
             sourceType: "script"
         },
+        plugins: {
+            import: importPlugin
+        },
+
         rules: {
             indent: ["error", 4],
             semi: ["error", "never"],
@@ -29,7 +35,11 @@ export default [
             "spaced-comment": ["error", "always", { "markers": ["="] }],
             "eol-last": ["error", "always"],
             "no-trailing-spaces": "error",
+            "import/no-dynamic-require": "error",
             "no-multiple-empty-lines": ["error", { "max": 1, "maxEOF": 0 }]
+            
+           
+  
         }
     }
 ]
